@@ -1,0 +1,1103 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>CPU Cycle Animator</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+:root{
+  --bg:#edf1f6; --panel:#fbfcfe; --ink:#0f1a27; --muted:#556577; --line:#cdd6e0;
+  --wire:#8392a4; --box:#ffffff; --boxline:#2a394b;
+  --data:#1a56f0; --data-soft:#dce6ff; --data-ink:#0f3fc0;
+  --ctrl:#d9600a; --ctrl-soft:#ffe8d6; --ctrl-ink:#a64300;
+  --ext:#7a45d8; --ext-soft:#ece3ff; --ext-ink:#5a2cb0;
+  --ok:#14804f; --bad:#c42b39; --bad-soft:#fde8ea;
+  --shadow:0 1px 0 rgba(15,26,39,.04), 0 8px 24px -12px rgba(15,26,39,.18);
+  --font-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --font-body:'Instrument Sans','Segoe UI',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1118; --panel:#121a24; --ink:#e8eef5; --muted:#92a2b4; --line:#243343;
+    --wire:#566b82; --box:#172231; --boxline:#8da1b8;
+    --data:#6ea4ff; --data-soft:#15294d; --data-ink:#9cc0ff;
+    --ctrl:#ffa24a; --ctrl-soft:#3a2511; --ctrl-ink:#ffc590;
+    --ext:#b392ff; --ext-soft:#271b45; --ext-ink:#cdb8ff;
+    --ok:#4cc38f; --bad:#ff7b86; --bad-soft:#3a1a1f;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b1118; --panel:#121a24; --ink:#e8eef5; --muted:#92a2b4; --line:#243343;
+  --wire:#566b82; --box:#172231; --boxline:#8da1b8;
+  --data:#6ea4ff; --data-soft:#15294d; --data-ink:#9cc0ff;
+  --ctrl:#ffa24a; --ctrl-soft:#3a2511; --ctrl-ink:#ffc590;
+  --ext:#b392ff; --ext-soft:#271b45; --ext-ink:#cdb8ff;
+  --ok:#4cc38f; --bad:#ff7b86; --bad-soft:#3a1a1f;
+  --shadow:0 1px 0 rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.6);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg); color:var(--ink); font:16px/1.6 var(--font-body);
+  padding-left:max(16px, env(safe-area-inset-left,0px));
+  padding-right:max(16px, env(safe-area-inset-right,0px));
+  padding-block:28px 64px;}
+.wrap{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0;letter-spacing:-.01em}
+h1{font-size:clamp(30px,4.4vw,48px);line-height:1.05;font-weight:800}
+h2{font-size:22px;font-weight:700}
+h3{font-size:16px;font-weight:700}
+code,.mono{font-family:var(--font-mono);font-size:.9em}
+code{background:var(--data-soft);color:var(--data-ink);padding:1px 6px;border-radius:5px;white-space:nowrap}
+.lede{margin:10px 0 0;max-width:64ch;color:var(--muted);font-size:17px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--data);outline-offset:2px;border-radius:6px}
+.entry{padding:18px;display:flex;flex-direction:column;gap:14px}
+.entry form{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:6px;flex:1 1 280px;min-width:0}
+.field label{font-weight:600;font-size:14px}
+#ins{font:600 20px/1.2 var(--font-mono);padding:12px 14px;border-radius:8px;border:2px solid var(--boxline);background:var(--box);width:100%;text-transform:uppercase;min-width:0}
+.btn{border:1px solid var(--line);background:var(--box);border-radius:8px;padding:10px 14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;line-height:1.2}
+.btn:hover{border-color:var(--boxline)}
+.btn.primary{background:var(--data);border-color:var(--data);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#07101f}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#07101f}}
+.btn svg{width:16px;height:16px;fill:currentColor}
+.btn:disabled{opacity:.45;cursor:default}
+.examples{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.examples span{font-size:14px;color:var(--muted);margin-right:2px}
+.ex{font:600 13px/1 var(--font-mono);padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:var(--box);cursor:pointer}
+.ex:hover{border-color:var(--data);color:var(--data-ink)}
+.opts{display:flex;flex-wrap:wrap;gap:6px 22px;align-items:center;font-size:14px;color:var(--muted)}
+.opts label{display:inline-flex;gap:8px;align-items:center;color:var(--ink);font-weight:500;cursor:pointer}
+.opts input{width:18px;height:18px;accent-color:var(--data)}
+.regs{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;font-size:14px;color:var(--muted)}
+.regs label{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-weight:600}
+.regs input{width:84px;font:600 15px var(--font-mono);padding:7px 8px;border-radius:7px;border:1.5px solid var(--line);background:var(--box);text-transform:uppercase}
+.err{background:var(--bad-soft);color:var(--bad);border:1px solid var(--bad);padding:10px 12px;border-radius:8px;font-size:15px}
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;align-items:start}
+@media (max-width:1080px){.stage{grid-template-columns:minmax(0,1fr)}}
+.diagram{padding:14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.pills{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.pill{display:flex;flex-direction:column;padding:7px 14px 8px;border-radius:10px;border:1.5px solid var(--line);background:var(--box);min-width:104px}
+.pill b{font:700 15px/1.2 var(--font-display)}
+.pill small{font-size:12px;color:var(--muted)}
+.pill.active{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.pill.active small{color:inherit;opacity:.8}
+.pill.done{border-color:var(--ok)}
+.pill.done small{color:var(--ok)}
+.pill.skipped{border-style:dashed;opacity:.75}
+.pillarrow{color:var(--muted);font-size:18px}
+.loopnote{font-size:13px;color:var(--muted);margin-left:auto}
+.svgscroll{overflow-x:auto;border-radius:8px;background:var(--bg);border:1px solid var(--line)}
+#svg{display:block;width:100%;min-width:760px;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:22px;height:0;border-top:3px solid var(--data);vertical-align:middle;margin-right:6px;border-radius:2px}
+.legend i.o{border-color:var(--ctrl);border-top-width:0;height:12px;width:12px;border-radius:50%;background:var(--ctrl);margin-right:6px;vertical-align:-2px}
+.legend i.p{border-color:var(--ext);border-top-style:dashed}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.controls .grow{flex:1 1 180px;display:flex;flex-direction:column;gap:2px;min-width:140px}
+.controls .grow small{font-size:12px;color:var(--muted)}
+#scrub{width:100%;accent-color:var(--data)}
+.speed{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
+.speed select{border:1px solid var(--line);background:var(--box);border-radius:8px;padding:8px 8px}
+.panel{padding:20px;display:flex;flex-direction:column;gap:14px;position:sticky;top:max(12px, env(safe-area-inset-top,0px))}
+@media (max-width:1080px){.panel{position:static}}
+.ptag{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.ptag .ph{background:var(--ink);color:var(--bg);padding:4px 9px;border-radius:6px}
+.goal{font-size:14px;color:var(--muted);margin:0}
+.rtl{font:700 22px/1.35 var(--font-mono);background:var(--box);border:1.5px solid var(--boxline);border-radius:10px;padding:12px 14px;overflow-wrap:anywhere}
+.say{margin:0;font-size:16.5px}
+.say b{font-weight:700}
+.tip{margin:0;padding:10px 12px;border-radius:8px;background:var(--data-soft);color:var(--ink);font-size:14.5px}
+.tip b{color:var(--data-ink)}
+.sigs h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px;font-family:var(--font-body)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 12px/1.2 var(--font-mono);padding:6px 8px;border-radius:6px;background:var(--ctrl-soft);color:var(--ctrl-ink);border:1px solid var(--ctrl)}
+.chip.ext{background:var(--ext-soft);color:var(--ext-ink);border-color:var(--ext)}
+.chip.none{background:transparent;border-style:dashed;color:var(--muted);border-color:var(--line)}
+.done-banner{background:var(--box);border:1.5px solid var(--ok);border-radius:10px;padding:12px 14px;font-size:15px}
+.done-banner b{color:var(--ok)}
+.intro h3{margin-bottom:6px}
+.intro ul{list-style:none;padding:0;margin:10px 0;display:flex;flex-direction:column;gap:8px}
+.intro li{display:flex;gap:10px;align-items:baseline;font-size:15px}
+.intro li b{min-width:74px;font-family:var(--font-display)}
+.intro li span{color:var(--muted)}
+.notation{font-size:14px;color:var(--muted);border-top:1px solid var(--line);padding-top:12px;margin:0}
+.listing{padding:18px;display:flex;flex-direction:column;gap:12px}
+.listing p{margin:0;color:var(--muted);max-width:75ch}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14.5px}
+th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding:8px 10px;border-bottom:2px solid var(--line)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+tr.ph td{background:var(--bg);font:700 13px var(--font-display);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--data-soft)}
+tr.row.cur td{background:var(--data-soft);box-shadow:inset 3px 0 0 var(--data)}
+tr.row.past td:first-child{color:var(--ok)}
+td.n{font:600 13px var(--font-mono);color:var(--muted);white-space:nowrap}
+td.r{font:700 14px var(--font-mono);white-space:nowrap}
+td.mono{font-family:var(--font-mono);font-size:13px;white-space:nowrap}
+td .chip{display:inline-block;margin:0 4px 4px 0;padding:3px 6px;font-size:11.5px}
+.glossary{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.glossary .g{padding:14px 16px;display:flex;flex-direction:column;gap:4px}
+.glossary .g b{font:700 15px var(--font-display)}
+.glossary .g p{margin:0;font-size:14.5px;color:var(--muted)}
+.glossary .g .nm{font:700 12px var(--font-mono);color:var(--data-ink)}
+.foot{font-size:13px;color:var(--muted);max-width:90ch}
+.cycle-title{display:flex;gap:10px;align-items:baseline;margin:22px 0 6px;font-family:var(--font-display);font-size:18px;font-weight:700}
+.cycle-title .range{font:500 13px var(--font-mono);color:var(--muted);letter-spacing:0}
+.cycle-title .tag{font:600 11px var(--font-body);background:var(--muted);color:var(--bg);padding:2px 8px;border-radius:999px;letter-spacing:.06em;text-transform:uppercase}
+.cycle-empty{font:500 13px var(--font-mono);color:var(--muted);margin:0 0 4px 2px}
+svg text{font-family:var(--font-body);fill:var(--ink)}
+.wire path{fill:none;stroke:var(--wire);stroke-width:5;stroke-linejoin:round}
+.wire polygon{fill:var(--wire);transform-box:fill-box;transform-origin:center;transform:scale(1.6)}
+.wire.ext path{stroke:var(--ext);stroke-dasharray:10 6;opacity:.85}
+.wire.ext polygon{fill:var(--ext);opacity:.75}
+.wire.live path{stroke:var(--data);stroke-width:8;opacity:1}
+.wire.live polygon{fill:var(--data);opacity:1;transform:scale(1.8)}
+.wire.ext.live path{stroke:var(--ext);stroke-dasharray:none}
+.wire.ext.live polygon{fill:var(--ext)}
+.wire.tick path{stroke:var(--ctrl);stroke-width:6;opacity:1}
+.wire.tick polygon{fill:var(--ctrl)}
+.dot{fill:var(--wire);transform-box:fill-box;transform-origin:center;transform:scale(1.5)}
+.rect{fill:var(--box);stroke:var(--boxline);stroke-width:2}
+.rect.ext{stroke:var(--ext);stroke-dasharray:6 4}
+.bx.flash .rect{animation:flash 1.3s ease-out}
+.bx.hot .rect{stroke:var(--data);stroke-width:3.5}
+.bx.think .rect{stroke:var(--ctrl);stroke-width:3.5}
+@keyframes flash{0%{fill:var(--data);stroke:var(--data)}100%{fill:var(--box)}}
+.bx.flash .val{animation:flashtxt 1.3s ease-out}
+@keyframes flashtxt{0%{fill:#fff}100%{fill:var(--ink)}}
+.lbl{font:700 12px var(--font-body);letter-spacing:.09em;fill:var(--muted)}
+.val{font:700 16px var(--font-mono);fill:var(--ink);text-anchor:middle}
+.sub{font:600 11px var(--font-body);fill:var(--muted);letter-spacing:.04em}
+.gate{fill:var(--bg);stroke:var(--ctrl);stroke-width:2.5}
+.gate.on{fill:var(--ctrl);stroke:var(--ctrl)}
+.gl{font:700 13px var(--font-mono);fill:var(--ctrl-ink)}
+.gl.on{font-size:15px}
+.mrow{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+.mrow.hot{fill:var(--data-soft);stroke:var(--data);stroke-width:2.5}
+.maddr{font:600 12px var(--font-mono);fill:var(--muted)}
+.mval{font:700 15px var(--font-mono);text-anchor:end}
+.mchip rect{fill:none;stroke:var(--line);stroke-width:1.5}
+.mchip text{font:700 11px var(--font-mono);fill:var(--muted);text-anchor:middle}
+.mchip.on rect{fill:var(--ctrl);stroke:var(--ctrl)}
+.mchip.on text{fill:#fff}
+.ptl rect{fill:var(--data)}
+.ptl.x rect{fill:var(--ext)}
+.ptl text{font:700 13px var(--font-mono);fill:#fff;text-anchor:middle}
+:root[data-theme="dark"] .ptl text{fill:#07101f}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .ptl text{fill:#07101f}}
+.popup{font:800 16px var(--font-mono);fill:var(--data);text-anchor:middle;animation:rise 1.2s ease-out forwards}
+@keyframes rise{0%{opacity:0;transform:translateY(6px)}20%{opacity:1}100%{opacity:0;transform:translateY(-16px)}}
+@media (prefers-reduced-motion: reduce){
+  .bx.flash .rect,.bx.flash .val,.popup{animation:none}
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>CPU Cycle Animator</h1>
+    <p class="lede">Type one assembly instruction. Watch the CPU fetch it, follow any pointer, execute it and check for interrupts, one clock tick at a time, on the datapath from the textbook figure. Register-indirect address calculation now runs inside the Execute cycle (matching the PPT's ICC state diagram), and each cycle (Fetch, Indirect, Execute, Interrupt) has its own Boolean-expression table in <code>t1, t2, t3, …</code> notation.</p>
+  </header>
+
+  <section class="card entry" aria-label="Instruction input">
+    <form id="form" autocomplete="off">
+      <div class="field">
+        <label for="ins">Your instruction</label>
+        <input id="ins" type="text" value="MOV AX,BX" spellcheck="false" aria-describedby="hint">
+      </div>
+      <button class="btn primary" type="submit" id="runbtn"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M5 3l10 6-10 6z"/></svg>Load instruction</button>
+    </form>
+    <div class="examples" id="examples"><span>Try:</span></div>
+    <div class="opts">
+      <label for="irq"><input type="checkbox" id="irq" checked> A device (for example the keyboard) is asking for attention</label>
+      <span id="hint"><b>Instructions:</b> MOV ADD SUB AND OR XOR CMP INC DEC NOT NEG JMP STC CLC CMC STD CLD STI CLI NOP HLT. <b>Operands:</b> <code>BX</code> register, <code>5</code> or <code>05H</code> number, <code>[0200]</code> memory cell, <code>[BX]</code> or <code>[BX+4]</code> address held in a register, <code>[[0300]]</code> pointer stored in memory. Numbers are hex; <code>#12</code> is decimal, <code>101B</code> binary.</span>
+    </div>
+    <div class="regs" id="regs"><span>Starting registers (hex):</span></div>
+    <div class="err" id="err" role="alert" hidden></div>
+  </section>
+
+  <section class="stage">
+    <div class="card diagram">
+      <div class="pills" id="pills" aria-label="Instruction cycle phases"></div>
+      <div class="svgscroll"><div id="svgmount"></div></div>
+      <div class="legend">
+        <span><i></i>data on the move</span>
+        <span><i class="o"></i>control signal C0 to C13 switched on</span>
+        <span><i class="p"></i>path or box added so the demo can run (not in the original figure)</span>
+      </div>
+      <div class="controls">
+        <button class="btn" id="bRestart" title="Start over"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2.5a6.5 6.5 0 1 0 6.2 4.6l-1.9.6A4.5 4.5 0 1 1 9 4.5V7l4.2-3.2L9 .6z"/></svg>Restart</button>
+        <button class="btn" id="bBack" title="Previous step (Left arrow)"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M13 3v12L4 9z"/></svg>Back</button>
+        <button class="btn primary" id="bPlay" title="Play or pause (Space)"><svg viewBox="0 0 18 18" aria-hidden="true" id="playIcon"><path d="M5 3l10 6-10 6z"/></svg><span id="playTxt">Play</span></button>
+        <button class="btn" id="bNext" title="Next step (Right arrow)">Next<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M5 3v12l9-6z"/></svg></button>
+        <div class="grow"><input id="scrub" type="range" min="0" max="1" value="0" aria-label="Step position"><small id="scrubTxt"></small></div>
+        <label class="speed" for="speed">Speed
+          <select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option></select>
+        </label>
+      </div>
+    </div>
+
+    <aside class="card panel" id="panel" aria-live="polite"></aside>
+  </section>
+
+  <section class="card listing" aria-label="Micro-program">
+    <h2>The whole cycle as a micro-program</h2>
+    <p>Every row is one clock tick, labelled <code>t1, t2, t3, …</code> continuously across the whole instruction. The notation on the left says what moves; the orange chips are the control signals the control unit switches on. Click a row to jump to it.</p>
+    <div class="tablewrap"><table><thead><tr><th>#</th><th>Micro-operation</th><th>In short</th><th>Control signals</th></tr></thead><tbody id="tbody"></tbody></table></div>
+  </section>
+
+  <section class="card listing" aria-label="Boolean expressions">
+    <h2>Boolean expressions for the control signals</h2>
+    <p>Each cycle of the instruction has its own Boolean-expression table below. Signals that appear in more than one cycle (for example <code>C0</code>, which drives the address bus in both Fetch and Interrupt) get a separate expression in each cycle — the union over all cycles is the signal's overall Boolean function. The tick variable <code>tN</code> is numbered <b>continuously</b> across the whole micro-program (<code>t1</code> = first tick, <code>t2</code> = second, …), so expressions are unambiguous.</p>
+    <p>The cycle headings also show the phase-relative labels used in the lecture (<code>F1, F2, F3</code> for Fetch, <code>I1, I2, I3</code> for Indirect, <code>E1, E2, …</code> for Execute, <code>IN1, IN2, IN3</code> for Interrupt — see PPT Slide 32), so you can compare directly. A control signal is switched on when <em>any</em> of its ticks is active, so its expression is the <b>OR</b> (written <code>+</code>) of those ticks.</p>
+    <div id="boolCycles"></div>
+  </section>
+
+  <section aria-label="Glossary" style="display:flex;flex-direction:column;gap:12px">
+    <h2>What each box does</h2>
+    <div class="glossary" id="glossary"></div>
+    <p class="foot">The meaning of C0 to C13 follows how the lines are drawn in the figure. Textbooks number them differently, so check yours. The register file, the memory column, the flag register and the dashed control-unit paths are additions that let this page run real instructions such as <code>MOV AX,BX</code> or <code>STC</code>. Real instructions are binary; the readable text is shown instead so you can follow it. Boolean expressions use the continuous <code>t*</code> tick names so they can be compared directly with the textbook's control-unit equations; the phase-relative labels (<code>F*, I*, E*, IN*</code>) are shown alongside in the cycle headings.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const hex = n => n.toString(16).toUpperCase().padStart(4, '0');
+const show = v => v == null ? '----' : (typeof v === 'number' ? hex(v) : String(v));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const REGS = ['AX','BX','CX','DX'];
+const FLAGS = ['CF','ZF','IF','DF'];
+const RESERVED = [0x100, 0x101, 0x500, 0xFFF];
+const SAVE_ADDR = 0xFFF, ISR_ADDR = 0x500, CODE_ADDR = 0x100;
+const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ================= SVG geometry ================= */
+const BOX = {
+  MBR:{x:266,y:80,w:80,h:98,tip:'MBR, Memory Buffer Register: everything going into or out of memory passes through here.'},
+  MAR:{x:266,y:330,w:80,h:120,tip:'MAR, Memory Address Register: holds the address of the memory cell we want to read or write.'},
+  PC:{x:422,y:236,w:99,h:48,tip:'PC, Program Counter: address of the next instruction.'},
+  IR:{x:560,y:236,w:112,h:48,tip:'IR, Instruction Register: the instruction being executed.'},
+  AC:{x:751,y:190,w:99,h:48,tip:'AC, Accumulator: the ALU\'s working register.'}
+};
+const W = [
+  ['w_c0','M266,382 H190',['l',190,382]],
+  ['w_c5','M190,107 H266',['r',266,107]],
+  ['w_c12','M266,156 H190',['l',190,156]],
+  ['w_b1','M346,156 H383'],
+  ['w_b2','M383,156 H435 a8,8 0 0 1 16,0 H471'],
+  ['w_b3','M471,156 H616'],
+  ['w_b4','M616,156 H648'],
+  ['w_b5','M648,156 H672'],
+  ['w_b6','M672,156 H700'],
+  ['w_v1','M700,156 V214'],
+  ['w_v2','M700,214 V332'],
+  ['w_c10','M700,214 H751',['r',751,214]],
+  ['w_c6','M700,332 H747',['r',747,332]],
+  ['w_c3','M471,156 V236',['d',471,236]],
+  ['w_c4','M616,156 V236',['d',616,236]],
+  ['w_c8','M383,156 V395 H346',['l',346,395]],
+  ['w_c2','M471,284 V418 H346',['l',346,418]],
+  ['w_c1','M443,236 V107'],
+  ['w_t1','M443,107 H346',['l',346,107]],
+  ['w_t2','M800,107 H680 a8,8 0 0 0 -16,0 H656 a8,8 0 0 0 -16,0 H443'],
+  ['w_c11','M800,190 V107'],
+  ['w_rfout','M648,66 V156',['d',648,152]],
+  ['w_rfin','M672,156 V66',['u',672,66]],
+  ['w_c7','M775,238 V288',['d',775,288]],
+  ['w_c9','M825,288 V238',['u',825,238]],
+  ['w_c13','M616,284 V377',['d',616,377]],
+  ['w_clk','M517,500 H590 V455',['u',590,455],'tick'],
+  ['w_cs','M640,455 V492',['d',640,492],'static'],
+  ['w_x1','M559,438 H346',['l',346,438],'ext'],
+  ['w_x2','M559,395 H500 V284',['u',500,284],'ext'],
+  ['w_x3','M671,415 H803 V376',['u',803,376],'ext'],
+  ['w_flagin','M900,100 H900 V377',['d',900,377],'ext']
+];
+const ROUTES = {
+  'PC>MAR':{pts:[[471,284],[471,418],[346,418]],glow:['w_c2'],gates:['C2']},
+  'MAR>MEM':{pts:[[266,382],[190,382]],glow:['w_c0'],gates:['C0']},
+  'MEM>MBR':{pts:[[190,107],[266,107]],glow:['w_c5'],gates:['C5']},
+  'MBR>MEM':{pts:[[266,156],[190,156]],glow:['w_c12'],gates:['C12']},
+  'MBR>IR':{pts:[[346,156],[616,156],[616,236]],glow:['w_b1','w_b2','w_b3','w_c4'],gates:['C4']},
+  'MBR>MAR':{pts:[[346,156],[383,156],[383,395],[346,395]],glow:['w_b1','w_c8'],gates:['C8']},
+  'MBR>PC':{pts:[[346,156],[471,156],[471,236]],glow:['w_b1','w_b2','w_c3'],gates:['C3']},
+  'MBR>AC':{pts:[[346,156],[700,156],[700,214],[751,214]],glow:['w_b1','w_b2','w_b3','w_b4','w_b5','w_b6','w_v1','w_c10'],gates:['C10']},
+  'MBR>ALU':{pts:[[346,156],[700,156],[700,332],[747,332]],glow:['w_b1','w_b2','w_b3','w_b4','w_b5','w_b6','w_v1','w_v2','w_c6'],gates:['C6']},
+  'MBR>RF':{pts:[[346,156],[672,156],[672,66]],glow:['w_b1','w_b2','w_b3','w_b4','w_b5','w_rfin'],gates:['Rin']},
+  'RF>AC':{pts:[[648,66],[648,156],[700,156],[700,214],[751,214]],glow:['w_rfout','w_b5','w_b6','w_v1','w_c10'],gates:['Rout','C10']},
+  'RF>ALU':{pts:[[648,66],[648,156],[700,156],[700,332],[747,332]],glow:['w_rfout','w_b5','w_b6','w_v1','w_v2','w_c6'],gates:['Rout','C6']},
+  'PC>MBR':{pts:[[443,236],[443,107],[346,107]],glow:['w_c1','w_t1'],gates:['C1']},
+  'AC>MBR':{pts:[[800,190],[800,107],[346,107]],glow:['w_c11','w_t2','w_t1'],gates:['C11']},
+  'IR>CU':{pts:[[616,284],[616,377]],glow:['w_c13'],gates:['C13']},
+  'AC>ALU':{pts:[[775,238],[775,288]],glow:['w_c7'],gates:['C7']},
+  'ALU>AC':{pts:[[825,288],[825,238]],glow:['w_c9'],gates:['C9']},
+  'CU>MAR':{pts:[[559,438],[346,438]],glow:['w_x1'],gates:[],x:true},
+  'CU>PC':{pts:[[559,395],[500,395],[500,284]],glow:['w_x2'],gates:[],x:true},
+  'CU>ALU':{pts:[[671,415],[803,415],[803,376]],glow:['w_x3'],gates:[],x:true},
+  'CU>FLAGS':{pts:[[900,377],[900,100]],glow:['w_flagin'],gates:[],x:true}
+};
+const GATES = [
+  ['C0',228,382,228,371,'m'],['C5',228,107,228,96,'m'],['C12',228,156,228,145,'m'],
+  ['C1',443,196,434,200,'e'],['C3',471,196,480,200,'s'],['C4',616,196,625,200,'s'],
+  ['C8',383,290,392,294,'s'],['C2',471,350,480,354,'s'],['C13',616,330,625,334,'s'],
+  ['C10',725,214,725,203,'m'],['C6',723,332,723,352,'m'],['C7',775,263,766,267,'e'],
+  ['C9',825,263,834,267,'s'],['C11',800,150,809,154,'s'],
+  ['Rout',648,87,639,91,'e'],['Rin',672,87,681,91,'s']
+];
+const GLABEL = {Rout:'R-out',Rin:'R-in'};
+
+function arrow(d,x,y){
+  const p = {r:[x,y,x-9,y-5,x-9,y+5], l:[x,y,x+9,y-5,x+9,y+5], d:[x,y,x-5,y-9,x+5,y-9], u:[x,y,x-5,y+9,x+5,y+9]}[d];
+  return `<polygon points="${p[0]},${p[1]} ${p[2]},${p[3]} ${p[4]},${p[5]}"/>`;
+}
+function genericBox(id){
+  const b = BOX[id], cx = b.x + b.w/2;
+  return `<g class="bx" id="b-${id}"><title>${esc(b.tip)}</title><rect class="rect" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" rx="7"/>
+  <text class="lbl" x="${b.x+9}" y="${b.y+18}">${id}</text>
+  <text class="val" id="v-${id}" x="${cx}" y="${b.y + (b.h>60 ? b.h/2+8 : 38)}"></text></g>`;
+}
+function buildSVG(){
+  let s = `<svg id="svg" viewBox="0 0 930 540" role="img" aria-label="CPU datapath: MBR, MAR, PC, IR, AC, ALU, control unit, flag register and clock joined by buses and control signals C0 to C13">`;
+  s += W.map(([id,d,a,cls]) => `<g class="wire ${cls==='ext'?'ext':''}" id="${id}"><path d="${d}"/>${a?arrow(a[0],a[1],a[2]):''}</g>`).join('');
+  s += [[383,156],[471,156],[616,156],[443,107],[700,214],[648,156],[672,156],[500,395],[900,110]].map(([x,y]) => `<circle class="dot" cx="${x}" cy="${y}" r="3.5"/>`).join('');
+  s += `<g id="mem"><rect class="rect" x="10" y="70" width="180" height="400" rx="8"/>
+    <text class="lbl" x="20" y="93">MAIN MEMORY</text>
+    <g class="mchip" id="mc-READ"><rect x="20" y="98" width="52" height="16" rx="4"/><text x="46" y="110">READ</text></g>
+    <g class="mchip" id="mc-WRITE"><rect x="78" y="98" width="56" height="16" rx="4"/><text x="106" y="110">WRITE</text></g>
+    <g id="memrows"></g></g>`;
+  s += `<g id="rf"><title>Register file (added): general registers AX, BX, CX, DX, reached over the internal bus.</title><rect class="rect ext" x="452" y="4" width="320" height="62" rx="8"/>
+    <text class="lbl" x="462" y="17" style="fill:var(--ext-ink)">REGISTER FILE (ADDED)</text>`;
+  REGS.forEach((r,i) => { const x = 462 + i*76;
+    s += `<g class="bx" id="b-${r}"><rect class="rect" x="${x}" y="24" width="70" height="38" rx="5" style="stroke-width:1.5"/><text class="sub" x="${x+6}" y="37">${r}</text><text class="val" id="v-${r}" x="${x+35}" y="56" style="font-size:15px"></text></g>`; });
+  s += `</g>`;
+  s += `<g class="bx" id="b-FLAGS"><title>Flag register (added): CF, ZF, IF, DF.</title>
+    <rect class="rect ext" x="856" y="20" width="70" height="80" rx="6"/>
+    <text class="lbl" x="864" y="34" style="font-size:9px">FLAGS</text>
+    <text class="sub" x="862" y="50">CF</text><text class="val" id="v-CF" x="918" y="50" style="font-size:11px;text-anchor:end">0</text>
+    <text class="sub" x="862" y="64">ZF</text><text class="val" id="v-ZF" x="918" y="64" style="font-size:11px;text-anchor:end">0</text>
+    <text class="sub" x="862" y="78">IF</text><text class="val" id="v-IF" x="918" y="78" style="font-size:11px;text-anchor:end">0</text>
+    <text class="sub" x="862" y="92">DF</text><text class="val" id="v-DF" x="918" y="92" style="font-size:11px;text-anchor:end">0</text>
+    </g>`;
+  ['MBR','MAR','PC','IR','AC'].forEach(id => s += genericBox(id));
+  s += `<g class="bx" id="b-ALU"><title>ALU, Arithmetic Logic Unit.</title><rect class="rect" x="747" y="288" width="112" height="88" rx="7"/>
+    <text class="lbl" x="756" y="306">ALU</text><text class="sub" x="756" y="326">operation</text><text class="val" id="v-OP" x="803" y="345" style="font-size:15px"></text>
+    <text class="sub" x="756" y="364">result</text><text class="val" id="v-ALU" x="826" y="364" style="font-size:15px"></text></g>`;
+  s += `<g class="bx" id="b-CU"><title>Control unit: reads the instruction, then switches the C signals on in the right order, one per clock tick.</title><rect class="rect" x="559" y="377" width="112" height="78" rx="7"/>
+    <text class="lbl" x="567" y="396" style="font-size:10.5px;letter-spacing:.03em">CONTROL UNIT</text><text class="val" id="v-CU" x="615" y="428" style="font-size:14px"></text></g>`;
+  s += `<text class="sub" x="648" y="510">control signals</text>`;
+  s += `<text class="sub" x="811" y="398" text-anchor="start" style="fill:var(--ext-ink)">ALU op</text>`;
+  s += `<g class="bx" id="b-CLK"><title>Clock: every micro-operation happens on one tick.</title><rect class="rect" x="421" y="478" width="96" height="43" rx="7"/><text class="lbl" x="430" y="495">CLOCK</text>
+    <path d="M430,515 h8 v-9 h9 v9 h9 v-9 h9 v9 h9 v-9 h9 v9 h8" fill="none" style="stroke:var(--wire);stroke-width:2"/></g>`;
+  s += GATES.map(([id,cx,cy,lx,ly,al]) => `<circle class="gate" id="g-${id}" cx="${cx}" cy="${cy}" r="6.5"/><text class="gl" id="gl-${id}" x="${lx}" y="${ly}" text-anchor="${al==='e'?'end':al==='m'?'middle':'start'}">${GLABEL[id]||id}</text>`).join('');
+  s += `<g id="layer"></g></svg>`;
+  $('#svgmount').innerHTML = s;
+}
+
+/* ================= signals & wording ================= */
+const SIG = {
+  C0:'MAR → address bus', C1:'PC → MBR', C2:'PC → MAR', C3:'bus → PC', C4:'bus → IR', C5:'data bus → MBR',
+  C6:'bus → ALU', C7:'AC → ALU', C8:'MBR → MAR', C9:'ALU → AC', C10:'bus → AC', C11:'AC → MBR',
+  C12:'MBR → data bus', C13:'IR → control unit'
+};
+function chipOf(code){
+  if (SIG[code]) return {t:`${code} · ${SIG[code]}`, cls:''};
+  if (code === 'READ') return {t:'READ · memory read (CR)', cls:''};
+  if (code === 'WRITE') return {t:'WRITE · memory write (CW)', cls:''};
+  if (code === 'PC+1') return {t:'PC + 1 · inside the PC', cls:''};
+  if (code.startsWith('Rout:')) return {t:`R-out(${code.slice(5)}) · ${code.slice(5)} → bus`, cls:'ext'};
+  if (code.startsWith('Rin:')) return {t:`R-in(${code.slice(4)}) · bus → ${code.slice(4)}`, cls:'ext'};
+  if (code.startsWith('OP:')) return {t:`ALU: ${code.slice(3)}`, cls:'ext'};
+  if (code.startsWith('FLAG:')) return {t:`${code.slice(5)} · set flag register`, cls:'ext'};
+  if (code === 'CU>MAR') return {t:'CU → MAR · fixed save address', cls:'ext'};
+  if (code === 'CU>PC') return {t:'CU → PC · handler address', cls:'ext'};
+  return {t:code, cls:''};
+}
+const PHASE = {
+  fetch:{name:'Fetch', goal:'Bring the next instruction from memory into the CPU.'},
+  indirect:{name:'Indirect', goal:'Follow a memory pointer to the real address (register-pointers defer address calculation to Execute).'},
+  execute:{name:'Execute', goal:'Do what the instruction says.'},
+  interrupt:{name:'Interrupt', goal:'If a device is waiting, save our place and jump to its handler.'}
+};
+const PH_ORDER = ['fetch','indirect','execute','interrupt'];
+const OPNAME = {MOV:'copies', ADD:'adds', SUB:'subtracts', AND:'bitwise-ANDs', OR:'bitwise-ORs', XOR:'bitwise-XORs', CMP:'compares', INC:'adds 1 to', DEC:'subtracts 1 from', NOT:'inverts every bit of', NEG:'negates', JMP:'jumps to',
+  STC:'sets the carry flag', CLC:'clears the carry flag', CMC:'complements the carry flag',
+  STD:'sets the direction flag', CLD:'clears the direction flag',
+  STI:'enables interrupts (sets IF)', CLI:'disables interrupts (clears IF)',
+  NOP:'does nothing', HLT:'halts the CPU'};
+
+/* ================= building the micro-program ================= */
+const MEM0 = {0x200:0x2A, 0x201:0x10, 0x300:0x200, 0x301:0x201};
+const OPS2 = ['MOV','ADD','SUB','AND','OR','XOR','CMP'], OPS1 = ['INC','DEC','NOT','NEG'];
+const OPS0 = ['STC','CLC','CMC','STD','CLD','STI','CLI','NOP','HLT'];
+const DEF_REGS = {AX:0x0001, BX:0x0200, CX:0x0003, DX:0x0000};
+function num(t){
+  t = t.trim().toUpperCase(); let m;
+  if ((m = t.match(/^0B([01]{1,16})$/)) || (m = t.match(/^([01]{2,16})B$/))) return parseInt(m[1], 2);
+  if ((m = t.match(/^#(\d{1,5})$/))){ const v = parseInt(m[1], 10); return v <= 0xFFFF ? v : null; }
+  if ((m = t.match(/^0X([0-9A-F]{1,4})$/))) return parseInt(m[1], 16);
+  if ((m = t.match(/^([0-9A-F]{1,5})H$/))){ const v = parseInt(m[1], 16); return v <= 0xFFFF ? v : null; }
+  if ((m = t.match(/^([0-9A-F]{1,4})$/))) return parseInt(m[1], 16);
+  return null;
+}
+function generate(text, irq, regsIn){
+  const regs = {...DEF_REGS, ...(regsIn || {})};
+  const clean = text.trim().replace(/\s+/g,' ');
+  if (!clean) return {err:'Type an instruction first, for example <code>MOV AX,BX</code> or <code>STC</code>.'};
+  const m = clean.match(/^([A-Za-z]+)\s*(.*)$/);
+  if (!m) return {err:'Start with an instruction name such as <code>MOV</code> or <code>ADD</code>.'};
+  const op = m[1].toUpperCase();
+  if (![...OPS2, ...OPS1, ...OPS0, 'JMP'].includes(op))
+    return {err:`I don't know <code>${esc(op)}</code> yet. Try MOV, ADD, SUB, AND, OR, XOR, CMP, INC, DEC, NOT, NEG, JMP or a flag op (STC, CLC, CMC, STD, CLD, STI, CLI, NOP, HLT), for example <code>ADD AX,5</code> or <code>STC</code>.`};
+  const mem = {...MEM0};
+  const isM = o => o && (o.k === 'mem' || o.k === 'ind' || o.k === 'ri');
+
+  function pOp(raw){
+    const u = raw.trim().toUpperCase().replace(/^(WORD\s+)?PTR\s*/, ''); let mm;
+    if (REGS.includes(u)) return {k:'reg', r:u};
+    if (/^(AL|AH|BL|BH|CL|CH|DL|DH|SI|DI|SP|BP|CS|DS|ES|SS)$/.test(u)) return {bad:`<code>${u}</code> is not available here. This demo has the four 16-bit registers AX, BX, CX and DX.`};
+    mm = u.match(/^\[\[\s*(.+?)\s*\]\]$/) || u.match(/^@\s*(.+)$/);
+    if (mm){ const p = num(mm[1]); return p == null ? null : {k:'ind', p}; }
+    mm = u.match(/^\[\s*(.+?)\s*\]$/);
+    if (mm){
+      const inner = mm[1].replace(/\s+/g, '');
+      const r = inner.match(/^(AX|BX|CX|DX)(?:\+(.+))?$/);
+      if (r){ let disp = 0; if (r[2] != null){ disp = num(r[2]); if (disp == null) return null; } return {k:'ri', r:r[1], disp, hasDisp:r[2] != null, raw:r[2]}; }
+      const a = num(inner); return a == null ? null : {k:'mem', a};
+    }
+    const n = num(u); return n == null ? null : {k:'imm', n, raw:u};
+  }
+  const BADOP = 'I could not read an operand. Use AX, BX, CX, DX, a number like <code>5</code> or <code>05H</code>, a memory cell <code>[0200]</code>, a register pointer <code>[BX]</code> or <code>[BX+4]</code>, or a memory pointer <code>[[0300]]</code>.';
+  let d = null, s = null;
+  if (OPS0.includes(op)){
+    if (m[2].trim()) return {err:`<code>${op}</code> takes no operands. Try just <code>${op}</code>.`};
+  } else if (op === 'JMP'){
+    const t = pOp(m[2]);
+    if (!t || t.bad || t.k !== 'imm') return {err:'<code>JMP</code> needs one address, for example <code>JMP 0200</code>.'};
+    d = {k:'imm', n:t.n};
+  } else if (OPS1.includes(op)){
+    d = pOp(m[2]);
+    if (d && d.bad) return {err:d.bad};
+    if (!d) return {err:`<code>${op}</code> needs one operand, for example <code>${op} AX</code> or <code>${op} [0200]</code>.`};
+    if (d.k === 'imm') return {err:`<code>${op}</code> changes its operand, so it cannot be a plain number. Use a register or memory.`};
+  } else {
+    const parts = m[2].split(',');
+    if (parts.length !== 2) return {err:`<code>${op}</code> needs two operands separated by a comma, for example <code>${op} AX,BX</code>.`};
+    d = pOp(parts[0]); s = pOp(parts[1]);
+    for (const o of [d, s]) if (o && o.bad) return {err:o.bad};
+    if (!d || !s) return {err:BADOP};
+    if (d.k === 'imm') return {err:'The first operand is where the result goes (or what is compared), so it cannot be a plain number. Use a register or a memory cell.'};
+    if (isM(d) && isM(s)) return {err:'Two memory operands in one instruction is not allowed (real CPUs forbid it too). Move one of them into a register first.'};
+    if (isM(d) && s.k === 'imm' && !(op === 'MOV' && (d.k === 'mem' || d.k === 'ind')))
+      return {err:'A number can go straight into memory only with <code>MOV [0200],5</code> or <code>MOV [[0300]],5</code> here. For other forms, load the number into a register first.'};
+  }
+  const ea = o => o.k === 'mem' ? o.a : o.ea;
+  [d, s].forEach(o => { if (!o) return;
+    if (o.k === 'ind' && !RESERVED.includes(o.p)){ if (typeof mem[o.p] !== 'number') mem[o.p] = 0x200; o.ea = mem[o.p] & 0xFFFF; }
+    if (o.k === 'ri') o.ea = (regs[o.r] + o.disp) & 0xFFFF; });
+  for (const o of [d, s]) if (isM(o)){
+    const chk = o.k === 'mem' ? [o.a] : o.k === 'ind' ? [o.p, o.ea] : [o.ea];
+    if (chk.some(a => RESERVED.includes(a)))
+      return {err:`Addresses 0100, 0101, 0500 and 0FFF are used by this demo for the instruction, the next instruction, the interrupt handler and the saved return address. Pick another address${o.k === 'ri' ? ' (or change the starting value of ' + o.r + ')' : ''}, for example 0200.`};
+    const a = ea(o); if (typeof mem[a] !== 'number') mem[a] = 0x55;
+  }
+  const fmt = (o, direct) => o.k === 'reg' ? o.r : o.k === 'imm' ? (op === 'JMP' ? hex(o.n) : o.raw)
+    : o.k === 'mem' ? `[${hex(o.a)}]` : o.k === 'ri' ? `[${o.r}${o.hasDisp ? '+' + o.raw : ''}]` : (direct ? `[${hex(o.ea)}]` : `[[${hex(o.p)}]]`);
+  const insText = OPS0.includes(op) ? op
+    : op === 'JMP' || OPS1.includes(op) ? `${op} ${fmt(d)}` : `${op} ${fmt(d)},${fmt(s)}`;
+  const insDirect = OPS2.includes(op) ? `${op} ${fmt(d,true)},${fmt(s,true)}` : OPS1.includes(op) ? `${op} ${fmt(d,true)}` : insText;
+  mem[CODE_ADDR] = insText; mem[0x101] = '(next instruction)'; mem[ISR_ADDR] = '(interrupt handler)'; mem[SAVE_ADDR] = 0;
+  const jumpTarget = op === 'JMP' ? d.n : null;
+  if (jumpTarget != null && typeof mem[jumpTarget] !== 'number' && typeof mem[jumpTarget] !== 'string') mem[jumpTarget] = '(code here)';
+
+  const S = {PC:CODE_ADDR, MAR:null, MBR:null, IR:null, AC:null, ALU:null, OP:null, CU:'waiting',
+             CF:0, ZF:0, IF:0, DF:0, ...regs, mem};
+  const clone = o => ({...o, mem:{...o.mem}});
+  const steps = [], snaps = [clone(S)];
+  const add = (st, fn) => { if (fn) fn(S); st.i = steps.length; steps.push(st); snaps.push(clone(S)); };
+  let P = 'fetch';
+  const T = (st, fn) => add({phase:P, ...st}, fn);
+
+  /* ---------- FETCH ---------- */
+  T({rtl:'MAR ← (PC)', title:'PC → MAR', sig:['C2'],
+    flows:[{r:'PC>MAR', label:hex(S.PC), reveal:['MAR']}],
+    say:`The CPU always starts by asking <b>"where is my next instruction?"</b> The <b>PC</b> (Program Counter) knows: it holds <code>${hex(S.PC)}</code>. We copy that address into the <b>MAR</b> (Memory Address Register), whose only job is to say <i>which memory cell</i> we want.`,
+    tip:`<b>Read the notation:</b> <code>MAR ← (PC)</code> means "MAR receives a copy of what is inside PC". The PC keeps its value.`},
+    X0 => { X0.MAR = X0.PC; });
+  const nextPC = S.PC + 1;
+  T({rtl:'MBR ← Memory[MAR]\nPC ← (PC) + 1', title:'Memory → MBR, PC + 1', sig:['C0','READ','C5','PC+1'], hiMem:CODE_ADDR,
+    flows:[{r:'MAR>MEM', label:hex(S.PC)}, {r:'MEM>MBR', label:insText, reveal:['MBR','PC']}],
+    say:`The MAR puts <code>${hex(S.PC)}</code> on the <b>address bus</b> and the control unit raises a <b>READ</b> signal. Memory finds cell ${hex(S.PC)} and sends back what it holds, <code>${esc(insText)}</code>, along the <b>data bus</b> into the <b>MBR</b> (Memory Buffer Register), the CPU's loading dock for anything coming from or going to memory.<br><br>In the same clock tick the PC adds 1 and now points at <code>${hex(nextPC)}</code>, so the following fetch already knows where to go.`},
+    X0 => { X0.MBR = insText; X0.PC = nextPC; });
+  T({rtl:'IR ← (MBR)', title:'MBR → IR', sig:['C4'],
+    flows:[{r:'MBR>IR', label:insText, reveal:['IR']}],
+    say:`Copy the instruction from the MBR into the <b>IR</b> (Instruction Register). The IR holds the instruction steady for as long as it is being worked on, while the MBR is free to carry other data.`},
+    X0 => { X0.IR = insText; });
+  const what = OPS0.includes(op) ? 'an internal control action'
+    : op === 'JMP' ? 'a new address' : op === 'MOV' ? 'a value into the destination' : OPS1.includes(op) ? 'the operand' : op === 'CMP' ? 'two values (and keeps only the flags)' : 'two values';
+  const operandsTxt = OPS0.includes(op) ? ' No operands — the operation is named in the opcode (implied addressing).'
+    : op === 'JMP' ? ` Target: <code>${hex(d.n)}</code>.` : OPS1.includes(op) ? ` Operand: <code>${esc(fmt(d))}</code>.` : ` Destination: <code>${esc(fmt(d))}</code>. Source: <code>${esc(fmt(s))}</code>.`;
+  T({rtl:'Control unit ← IR (decode)', title:'Decode the opcode', sig:['C13'],
+    flows:[{r:'IR>CU', label:op, reveal:['CU']}],
+    say:`The <b>control unit</b> looks into the IR and <b>decodes</b> it. The opcode <code>${op}</code> means the CPU ${OPNAME[op]} ${what}.${operandsTxt} Now it knows which control signals to switch on, and in which order. No data changes here. This is the control unit thinking.`},
+    X0 => { X0.CU = 'decoded ' + op; });
+
+  /* ---------- helpers ---------- */
+  const adrSay = o => o.k === 'ind' ? `The MBR holds the real address <code>${hex(ea(o))}</code> found in the indirect cycle.`
+    : o.k === 'ri' ? `The register-indirect effective address <code>${hex(ea(o))}</code> was worked out in Execute and is now in the MBR.`
+    : `The address <code>${hex(ea(o))}</code> is written in the instruction, in the address field of the IR.`;
+  const stMAR = o => { const a = ea(o);
+    const fromMBR = (o.k === 'ri' || o.k === 'ind');
+    T({rtl: fromMBR ? 'MAR ← MBR(address)' : 'MAR ← IR(address)',
+       title: fromMBR ? 'MBR(address) → MAR' : 'IR(address) → MAR', sig:['C8'],
+       flows:[{r:'MBR>MAR', label:hex(a), reveal:['MAR']}],
+       say:`The operand lives in memory, so memory must be told <i>which cell</i>. ${adrSay(o)} ${fromMBR
+         ? 'The MBR holds the effective address from the previous step, so we send it to the MAR through C8.'
+         : 'The address field of the instruction is routed via the MBR through path C8 into the MAR.'}`},
+      X0 => { X0.MAR = a; });
+  };
+  const stRead = o => { const a = ea(o), v = S.mem[a]; T({rtl:'MBR ← Memory[MAR]', title:'Memory → MBR', sig:['C0','READ','C5'], hiMem:a,
+    flows:[{r:'MAR>MEM', label:hex(a)}, {r:'MEM>MBR', label:hex(v), reveal:['MBR']}],
+    say:`Address bus carries <code>${hex(a)}</code>, the control unit says READ, and memory answers with <code>${hex(v)}</code> on the data bus. It waits in the MBR.`}, X0 => { X0.MBR = v; }); };
+  const stWrite = o => { const a = ea(o), v = S.MBR; T({rtl:'Memory[MAR] ← (MBR)', title:'MBR → Memory', sig:['C0','WRITE','C12'], hiMem:a,
+    flows:[{r:'MAR>MEM', label:hex(a)}, {r:'MBR>MEM', label:hex(v), reveal:['M:'+a]}],
+    say:`The MAR sends address <code>${hex(a)}</code>, the MBR sends the value <code>${hex(v)}</code> out on the data bus, and the control unit says <b>WRITE</b>. Memory cell ${hex(a)} now holds <code>${hex(v)}</code>.`}, X0 => { X0.mem[a] = v; }); };
+  const stRegToAC = (r, x = {}) => { const v = S[r]; T({rtl:`AC ← (${r})`, title:`${r} → AC`, sig:[`Rout:${r}`,'C10'],
+    flows:[{r:'RF>AC', label:hex(v), reg:r, reveal:['AC']}],
+    say:x.say || `Read register <code>${r}</code> (<code>${hex(v)}</code>) onto the internal bus and load it into the <b>AC</b> (Accumulator), the ALU's working register.`, tip:x.tip}, X0 => { X0.AC = v; }); };
+  const stMBRtoAC = () => { const v = S.MBR; T({rtl:'AC ← (MBR)', title:'MBR → AC', sig:['C10'],
+    flows:[{r:'MBR>AC', label:hex(v), reveal:['AC']}],
+    say:`Move the value <code>${hex(v)}</code> from the MBR over the bus into the AC.`}, X0 => { X0.AC = v; }); };
+  const stImmToAC = (n, why) => T({rtl:'AC ← MBR(number)', title:'Number → AC', sig:['C10'],
+    flows:[{r:'MBR>AC', label:hex(n), reveal:['AC']}],
+    say:`The number <code>${hex(n)}</code> was written inside the instruction (an <b>immediate</b> value), so it sits in the MBR. ${why}`}, X0 => { X0.AC = n; });
+  const stACtoMBR = (x = {}) => { const v = S.AC; T({rtl:'MBR ← (AC)', title:'AC → MBR', sig:['C11'],
+    flows:[{r:'AC>MBR', label:hex(v), reveal:['MBR']}],
+    say:x.say || `Copy the value <code>${hex(v)}</code> from the AC into the MBR through C11.`,
+    tip:x.tip || `<b>Why via the MBR?</b> In this figure the only road out of the AC (apart from the ALU) leads to the MBR. Anything leaving the AC goes through the MBR first.`}, X0 => { X0.MBR = v; }); };
+  const stMBRtoReg = (r, label) => { const v = S.MBR; T({rtl:`${r} ← (MBR)`, title:`MBR → ${r}`, sig:[`Rin:${r}`],
+    flows:[{r:'MBR>RF', label:hex(v), reg:r, reveal:[r]}],
+    say:label || `Put the value <code>${hex(v)}</code> from the MBR onto the bus and into register <code>${r}</code>. <b>Done:</b> ${r} now holds <code>${hex(v)}</code>.`}, X0 => { X0[r] = v; }); };
+  const calc = (o, a, b) => o === 'ADD' ? (a + b) & 0xFFFF : (o === 'SUB' || o === 'CMP') ? (a - b) & 0xFFFF : o === 'AND' ? a & b : o === 'XOR' ? a ^ b : a | b;
+  const SYM = {ADD:'+', SUB:'−', CMP:'−', AND:'AND', OR:'OR', XOR:'XOR'};
+  const stALU = (o, srcRoute, srcLabel, srcVal, srcReg, x = {}) => {
+    const a = S.AC, r = calc(o, a, srcVal), sym = SYM[o], cmp = o === 'CMP';
+    const newCF = (o === 'SUB' || cmp) ? (a < srcVal ? 1 : 0) : o === 'ADD' ? ((a + srcVal) > 0xFFFF ? 1 : 0) : 0;
+    const newZF = r === 0 ? 1 : 0;
+    T({rtl:`ALU ← (AC) ${sym} ${srcLabel}`, title: cmp ? 'ALU compares (subtracts)' : `ALU does ${o}`, sig:['C7','C6',`OP:${o}`, ...(srcReg ? [`Rout:${srcReg}`] : [])], alu:true,
+      flows:[{r:'AC>ALU', label:hex(a)}, {r:srcRoute, label:hex(srcVal), par:true, reg:srcReg, reveal:cmp ? ['ALU','OP','CU','CF','ZF'] : ['ALU','OP','CF','ZF']}],
+      say:x.say || `The <b>ALU</b> is the CPU's calculator. The AC sends <code>${hex(a)}</code> in through C7 while <code>${hex(srcVal)}</code> arrives from the bus through C6. The control unit tells the ALU to <b>${cmp ? 'SUBTRACT' : o}</b>: <code>${hex(a)} ${sym} ${hex(srcVal)} = ${hex(r)}</code>.${cmp ? ` CMP keeps only flags: ZF=<b>${newZF}</b>, CF=<b>${newCF}</b>.` : ` ZF=<b>${newZF}</b>, CF=<b>${newCF}</b>.`}`,
+      tip: x.tip || (o === 'SUB' || cmp ? `<b>Order matters:</b> the first operand (in the AC) minus the second.` : undefined)},
+      X0 => { X0.ALU = r; X0.OP = o; X0.ZF = newZF; X0.CF = newCF; if (cmp) X0.CU = `ZF=${newZF}`; });
+  };
+  const stALU1 = o => {
+    const a = S.AC, c = (o === 'INC' || o === 'DEC');
+    const r = o === 'INC' ? (a + 1) & 0xFFFF : o === 'DEC' ? (a - 1) & 0xFFFF : o === 'NOT' ? (~a) & 0xFFFF : (-a) & 0xFFFF;
+    const word = {INC:'add 1', DEC:'subtract 1', NOT:'flip every bit', NEG:'negate (two\'s complement)'}[o];
+    T({rtl: c ? `ALU ← (AC) ${o === 'INC' ? '+' : '−'} 1` : `ALU ← ${o}(AC)`, title:`ALU does ${o}`, sig:['C7',`OP:${o}`], alu:true,
+      flows: c ? [{r:'AC>ALU', label:hex(a)}, {r:'CU>ALU', label:'1', par:true, reveal:['ALU','OP']}] : [{r:'AC>ALU', label:hex(a), reveal:['ALU','OP']}],
+      say:`The AC sends <code>${hex(a)}</code> into the <b>ALU</b> through C7.${c ? ' The control unit supplies the constant <code>1</code> itself (dashed purple path), because there is no second operand.' : ' Only one input is needed.'} The ALU is told to <b>${word}</b>: result <code>${hex(r)}</code>.`},
+      X0 => { X0.ALU = r; X0.OP = o; });
+  };
+  const stACfromALU = () => { const v = S.ALU; T({rtl:'AC ← ALU result', title:'ALU → AC', sig:['C9'],
+    flows:[{r:'ALU>AC', label:hex(v), reveal:['AC']}],
+    say:`Send the result <code>${hex(v)}</code> back into the AC through C9.`}, X0 => { X0.AC = v; }); };
+
+  /* ---------- INDIRECT ---------- */
+  P = 'indirect';
+  const ind = [d, s].find(o => o && o.k === 'ind'), ri = [d, s].find(o => o && o.k === 'ri');
+  if (OPS0.includes(op)){
+    T({rtl:'Indirect addressing?  N/A', title:'No operands to chase', sig:[], check:true, skip:true, flows:[],
+      say:`<code>${op}</code> uses <b>implied addressing</b> — the flag or control action is named in the opcode itself. There is nothing to fetch from memory and no pointer to follow, so the indirect cycle is skipped.`},
+      X0 => { X0.CU = 'implied, no indirect'; });
+  } else if (!ind && !ri){
+    const why = [d, s].some(o => o && o.k === 'mem') ? 'The memory address is written right inside the instruction (<b>direct</b> addressing), so there is no pointer to chase.'
+      : op === 'JMP' ? 'The jump target is written right inside the instruction.'
+      : 'Both operands are registers or plain numbers, so nothing needs to be looked up in memory.';
+    T({rtl:'Indirect addressing?  No → skip', title:'Indirect? No, skip', sig:[], check:true, skip:true,
+      flows:[], say:`Before executing, the control unit asks: <b>"does this instruction find its operand through a pointer?"</b> ${why}<br><br>So the <b>indirect cycle is skipped</b>. Try <code>MOV AX,[BX]</code> or <code>MOV AX,[[0300]]</code> to see it run.`},
+      X0 => { X0.CU = 'indirect? no'; });
+  } else if (ind){
+    const p = ind.p, a = ind.ea;
+    T({rtl:'Indirect addressing?  Yes → run cycle', title:'Indirect? Yes', sig:[], check:true,
+      flows:[], say:`Before executing, the control unit asks: <b>"does this instruction find its operand through a pointer?"</b> Yes: <code>[[${hex(p)}]]</code> means cell ${hex(p)} does not hold the data. It holds the <i>address</i> of the data, like a note saying "look in drawer ${hex(a)}". We must follow that pointer first.`},
+      X0 => { X0.CU = 'indirect: yes'; });
+    if (s && s.k === 'imm') stImmToAC(s.n, `The chase below will overwrite the MBR, so we first park the number safely in the <b>AC</b> through C10.`);
+    T({rtl:'MAR ← IR(address)', title:'IR(address) → MAR', sig:['C8'],
+      flows:[{r:'MBR>MAR', label:hex(p), reveal:['MAR']}],
+      say:`<b>Indirect tick 1.</b> The pointer's address <code>${hex(p)}</code> is the <i>address field</i> of the instruction in the IR. The path C8 routes it (physically via the MBR, which still holds a copy from fetch) into the MAR. This is exactly the micro-operation the lecture labels <code>MAR ← (IR(Address))</code>.`},
+      X0 => { X0.MAR = p; });
+    T({rtl:'MBR ← Memory[MAR]', title:'Memory → MBR', sig:['C0','READ','C5'], hiMem:p,
+      flows:[{r:'MAR>MEM', label:hex(p)}, {r:'MEM>MBR', label:hex(a), reveal:['MBR']}],
+      say:`<b>Indirect tick 2.</b> Read cell <code>${hex(p)}</code>. It contains <code>${hex(a)}</code>, the <b>real address</b> of the operand. It lands in the MBR.`},
+      X0 => { X0.MBR = a; });
+    T({rtl:'IR(address) ← (MBR)', title:'MBR → IR(address)', sig:['C4'],
+      flows:[{r:'MBR>IR', label:hex(a), reveal:['IR']}],
+      say:`<b>Indirect tick 3.</b> Write the real address back into the address field of the instruction in the IR. It now reads <code>${esc(insDirect)}</code>, an ordinary direct instruction. The MBR keeps <code>${hex(a)}</code> ready for the execute cycle.`},
+      X0 => { X0.IR = insDirect; });
+  } else {
+    const r = ri.r, a = ri.ea, bv = S[r];
+    T({rtl:'Register-pointer addressing?  Yes', title:'Indirect? Yes (calc deferred to Execute)', sig:[], check:true, flows:[],
+      say:ri.hasDisp
+        ? `The instruction uses <b>base + displacement</b> addressing, <code>[${r}+${esc(ri.raw)}]</code>. The register ${r} holds <code>${hex(bv)}</code>, so the operand sits at <code>${hex(bv)} + ${hex(ri.disp)} = ${hex(a)}</code>. Following the ICC state diagram (PPT Slide 21), address calculation is part of the <b>Execute</b> cycle, so the indirect cycle ends here.`
+        : `The instruction uses <b>register indirect</b> addressing, <code>[${r}]</code>. The register ${r} holds <code>${hex(bv)}</code>, which is the <i>address</i> of the operand (not the operand itself). Following the ICC state diagram (PPT Slide 21), the register read and address computation belong to the <b>Execute</b> cycle, so the indirect cycle ends here.`,
+      tip:`<b>Compare with the PPT:</b> the "Indirect" phase of the ICC state diagram is reserved for <b>memory</b>-pointer addressing (<code>[[addr]]</code>). Register-pointer address calculation is done inside Execute.`},
+      X0 => { X0.CU = 'indirect: reg pointer'; });
+    P = 'execute';
+    stRegToAC(r, {say:`<b>Execute — effective-address calculation, tick 1.</b> Read register <code>${r}</code> (<code>${hex(bv)}</code>) onto the bus into the AC.${ri.hasDisp ? ' It is the base of the address.' : ' This is the operand\'s address. The AC is the only way to get it toward the MAR in this datapath.'}`});
+    if (ri.hasDisp){
+      stALU('ADD', 'MBR>ALU', ri.raw, ri.disp, null, {say:`<b>Execute — effective-address calculation, tick 2.</b> The displacement <code>${hex(ri.disp)}</code> is written inside the instruction (still in the MBR) and arrives over the bus through C6. The ALU adds it to the base in the AC: <code>${hex(bv)} + ${hex(ri.disp)} = ${hex(a)}</code>. This is the <b>effective address</b>.`, tip:' '});
+      stACfromALU();
+    }
+    stACtoMBR({say:`<b>Execute — effective-address calculation, done.</b> Copy the effective address <code>${hex(a)}</code> from the AC into the MBR through C11.`, tip:`<b>Why this detour?</b> The MAR can only be loaded from the MBR (C8) or the PC (C2). So the address goes AC, then MBR, then MAR.`});
+  }
+
+  /* ---------- EXECUTE ---------- */
+  P = 'execute';
+  if (OPS0.includes(op)){
+    const fd = {
+      STC:{rtl:'CF ← 1', flag:'CF', val:1, word:'set the carry flag to 1'},
+      CLC:{rtl:'CF ← 0', flag:'CF', val:0, word:'clear the carry flag to 0'},
+      CMC:{rtl:'CF ← ~CF', flag:'CF', val:null, word:'complement (flip) the carry flag'},
+      STD:{rtl:'DF ← 1', flag:'DF', val:1, word:'set the direction flag to 1 (strings count downward)'},
+      CLD:{rtl:'DF ← 0', flag:'DF', val:0, word:'clear the direction flag to 0 (strings count upward)'},
+      STI:{rtl:'IF ← 1', flag:'IF', val:1, word:'set the interrupt flag to 1 (the CPU may be interrupted)'},
+      CLI:{rtl:'IF ← 0', flag:'IF', val:0, word:'clear the interrupt flag to 0 (the CPU ignores interrupts)'},
+      NOP:{rtl:'(no operation)', flag:null, val:null, word:'do nothing (used to pad or time loops)'},
+      HLT:{rtl:'(halt)', flag:null, val:null, word:'halt the CPU until the next enabled interrupt or RESET'}
+    }[op];
+    T({rtl:fd.rtl, title:op, sig:[`FLAG:${op}`], flags:true, flows:[],
+      say:`<code>${op}</code> uses <b>implied addressing</b> — the flag or action is named in the opcode, so nothing needs to be fetched from memory. The control unit simply <b>${fd.word}</b>.${fd.flag ? ` (${fd.flag} is a 1-bit flip-flop inside the CPU's flag register, so no data moves on any bus.)` : ''}`,
+      tip: op === 'HLT' ? '<b>HLT</b> stops the fetch–execute loop until a RESET or an enabled interrupt wakes the CPU. In a real 8086, HLT only takes effect when IF = 1.' : undefined},
+      X0 => {
+        if (fd.flag){
+          if (fd.val === null) X0[fd.flag] = 1 - X0[fd.flag];
+          else X0[fd.flag] = fd.val;
+        }
+      });
+  } else if (op === 'JMP'){
+    const t = d.n;
+    T({rtl:'PC ← MBR(address)', title:'MBR → PC', sig:['C3'],
+      flows:[{r:'MBR>PC', label:hex(t), reveal:['PC']}],
+      say:`A jump simply overwrites the PC. The target address <code>${hex(t)}</code> is part of the instruction (the MBR still holds it), so it travels over the bus through C3 into the <b>PC</b>. The next fetch will read from <code>${hex(t)}</code> instead of ${hex(S.PC)}.`}, X0 => { X0.PC = t; });
+  } else if (OPS1.includes(op)){
+    if (d.k === 'reg'){ stRegToAC(d.r); stALU1(op); stACfromALU(); stACtoMBR(); stMBRtoReg(d.r); }
+    else { stMAR(d); stRead(d); stMBRtoAC(); stALU1(op); stACfromALU(); stACtoMBR(); stWrite(d); }
+  } else if (op === 'MOV'){
+    if (d.k === 'reg'){
+      if (s.k === 'reg'){ stRegToAC(s.r); stACtoMBR(); stMBRtoReg(d.r, `Put <code>${hex(S.MBR)}</code> onto the bus and into register <code>${d.r}</code>. <b>Done:</b> ${d.r} is now a copy of ${s.r}, and ${s.r} still has its value.`); }
+      else if (s.k === 'imm'){ const v = s.n; T({rtl:`${d.r} ← MBR(number)`, title:`MBR → ${d.r}`, sig:[`Rin:${d.r}`],
+        flows:[{r:'MBR>RF', label:hex(v), reg:d.r, reveal:[d.r]}],
+        say:`The number <code>${esc(s.raw)}</code> (= <code>${hex(v)}</code>) was written inside the instruction (an <b>immediate</b> value), so it is still in the MBR. Send it over the bus into register <code>${d.r}</code>. <b>Done:</b> ${d.r} = <code>${hex(v)}</code>.`}, X0 => { X0[d.r] = v; }); }
+      else { stMAR(s); stRead(s); stMBRtoReg(d.r); }
+    } else if (s.k === 'reg'){ stMAR(d); stRegToAC(s.r); stACtoMBR(); stWrite(d); }
+    else if (d.k === 'mem'){ stMAR(d); stImmToAC(s.n, `Park it in the <b>AC</b> through C10 so it can travel on to memory.`); stACtoMBR(); stWrite(d); }
+    else { stMAR(d); stACtoMBR({say:`The number <code>${hex(s.n)}</code> was parked in the AC during the indirect cycle. Copy it into the MBR through C11, ready to be written.`}); stWrite(d); }
+  } else {
+    const cmp = op === 'CMP';
+    const tail = r => { if (cmp) return; stACfromALU(); stACtoMBR(); r(); };
+    if (d.k === 'reg'){
+      if (s.k === 'reg'){ stRegToAC(d.r); stALU(op, 'RF>ALU', s.r, S[s.r], s.r); }
+      else if (s.k === 'imm'){ stRegToAC(d.r); stALU(op, 'MBR>ALU', s.raw, s.n); }
+      else { stMAR(s); stRead(s); stRegToAC(d.r); stALU(op, 'MBR>ALU', 'MBR', S.MBR); }
+      tail(() => stMBRtoReg(d.r));
+    } else {
+      stMAR(d); stRead(d); stMBRtoAC(); stALU(op, 'RF>ALU', s.r, S[s.r], s.r);
+      tail(() => stWrite(d));
+    }
+  }
+
+  /* ---------- INTERRUPT ---------- */
+  P = 'interrupt';
+  const retPC = S.PC;
+  if (!irq){
+    T({rtl:'Interrupt pending?  No → next fetch', title:'Interrupt? No', sig:[], check:true, skip:true, flows:[],
+      say:`The last question after every instruction: <b>"did a device ask for attention?"</b> (a key press, a timer, a finished disk read). Nothing is waiting, so the <b>interrupt cycle is skipped</b> and the CPU goes straight back to fetch the instruction at <code>${hex(retPC)}</code>.<br><br>Tick the box above the diagram to watch what happens when a device <i>is</i> waiting.`},
+      X0 => { X0.CU = 'no interrupt'; });
+  } else {
+    T({rtl:'Interrupt pending?  Yes → run cycle', title:'Interrupt? Yes', sig:[], check:true, flows:[],
+      say:`The last question after every instruction: <b>"did a device ask for attention?"</b> Yes, the keyboard raised an <b>interrupt request</b>. The CPU must not lose its place, so it saves where it was and then jumps to a special routine (the <b>interrupt handler</b>) that deals with the device.`},
+      X0 => { X0.CU = 'interrupt!'; });
+    T({rtl:'MBR ← (PC)', title:'PC → MBR', sig:['C1'],
+      flows:[{r:'PC>MBR', label:hex(retPC), reveal:['MBR']}],
+      say:`<b>Interrupt tick 1.</b> The PC holds <code>${hex(retPC)}</code>, the address of the instruction we would have run next. That is the <b>return address</b>. Copy it into the MBR through C1 so it can be written into memory.`},
+      X0 => { X0.MBR = retPC; });
+    T({rtl:'MAR ← save address\nPC ← handler address', title:'CU sets MAR and PC', sig:['CU>MAR','CU>PC'],
+      flows:[{r:'CU>MAR', label:hex(SAVE_ADDR), reveal:['MAR']}, {r:'CU>PC', label:hex(ISR_ADDR), par:true, reveal:['PC']}],
+      say:`<b>Interrupt tick 2.</b> The control unit supplies two fixed numbers. <code>${hex(SAVE_ADDR)}</code> goes into the MAR: the memory cell where the return address will be parked (think of it as a bookmark). <code>${hex(ISR_ADDR)}</code> goes into the PC: where the interrupt handler's code lives.`,
+      tip:`<b>Added path:</b> the original figure does not show how the control unit loads these numbers, so the dashed purple lines are an addition.`},
+      X0 => { X0.MAR = SAVE_ADDR; X0.PC = ISR_ADDR; });
+    T({rtl:'Memory[MAR] ← (MBR)', title:'MBR → Memory (save)', sig:['C0','WRITE','C12'], hiMem:SAVE_ADDR,
+      flows:[{r:'MAR>MEM', label:hex(SAVE_ADDR)}, {r:'MBR>MEM', label:hex(retPC), reveal:['M:'+SAVE_ADDR]}],
+      say:`<b>Interrupt tick 3.</b> Write the return address <code>${hex(retPC)}</code> into memory cell <code>${hex(SAVE_ADDR)}</code>. <b>Done:</b> our place is saved, and the PC points at the handler. The next fetch starts at <code>${hex(ISR_ADDR)}</code>. When the handler ends it will read cell ${hex(SAVE_ADDR)} to come back to ${hex(retPC)}. (The lecture notes: full context saving is done by the handler itself, not by these three micro-ops.)`},
+      X0 => { X0.mem[SAVE_ADDR] = retPC; });
+  }
+
+  const rows = new Set([CODE_ADDR, 0x101, ISR_ADDR, SAVE_ADDR]);
+  [d, s].forEach(o => { if (!o) return; if (o.k === 'mem') rows.add(o.a); if (o.k === 'ind'){ rows.add(o.p); rows.add(o.ea); } if (o.k === 'ri') rows.add(o.ea); });
+  if (jumpTarget != null) rows.add(jumpTarget);
+  return {ins:{text:insText, op, d, s}, steps, snaps, rows:[...rows].sort((a,b)=>a-b), irq, jumpTarget};
+}
+
+/* ================= app state ================= */
+let M = null, pos = 0, shown = -1, playing = false, busy = false, tok = 0, speed = 1;
+let live = {gates:new Set(), wires:new Set(), hot:null};
+let display = null;
+
+/* ================= rendering ================= */
+function setT(id, str, maxW, base){
+  const el = document.getElementById(id); if (!el) return;
+  str = String(str);
+  if (id === 'v-MBR' && str.includes(' ') && str.length > 7){
+    const [a, b] = [str.slice(0, str.indexOf(' ')), str.slice(str.indexOf(' ') + 1)], x = el.getAttribute('x');
+    el.innerHTML = `<tspan x="${x}" dy="-0.3em">${esc(a)}</tspan><tspan x="${x}" dy="1.3em">${esc(b)}</tspan>`;
+    el.style.fontSize = Math.max(9, Math.min(base, maxW / (Math.max(a.length, b.length) * 0.62))) + 'px'; return;
+  }
+  el.textContent = str;
+  el.style.fontSize = Math.max(8.5, Math.min(base, maxW / (Math.max(str.length, 1) * 0.62))) + 'px';
+}
+function buildMemoryRows(rows, mem){
+  const g = $('#memrows'); let s = '';
+  rows.forEach((a, i) => { const y = 120 + i * 42;
+    s += `<g id="mr-${a}"><rect class="mrow" x="18" y="${y}" width="164" height="36" rx="5"/><text class="maddr" x="26" y="${y+22}">${hex(a)}</text><text class="mval" id="mv-${a}" x="174" y="${y+23}"></text></g>`; });
+  g.innerHTML = s;
+}
+function render(S){
+  display = S;
+  setT('v-PC', show(S.PC), 84, 17); setT('v-MAR', show(S.MAR), 66, 17);
+  setT('v-MBR', show(S.MBR), 66, 17); setT('v-IR', show(S.IR), 98, 15);
+  setT('v-AC', show(S.AC), 84, 17);
+  REGS.forEach(r => setT('v-'+r, show(S[r]), 62, 15));
+  setT('v-OP', S.OP || 'idle', 96, 15); setT('v-ALU', show(S.ALU), 56, 15);
+  setT('v-CU', S.CU || '', 98, 14);
+  FLAGS.forEach(f => setT('v-'+f, String(S[f]||0), 22, 11));
+  M.rows.forEach(a => { const v = S.mem[a]; const el = document.getElementById('mv-'+a); if (!el) return;
+    if (typeof v === 'string'){ el.textContent = v; el.style.fontSize = Math.min(13, 118/(v.length*.62)) + 'px'; el.style.fill = 'var(--muted)'; }
+    else { el.textContent = hex(v); el.style.fontSize = '15px'; el.style.fill = ''; } });
+}
+function mix(cur, after, keys){
+  const n = {...cur, mem:{...cur.mem}};
+  keys.forEach(k => { if (k.startsWith('M:')){ const a = +k.slice(2); n.mem[a] = after.mem[a]; } else n[k] = after[k]; });
+  return n;
+}
+const idOfKey = k => k === 'OP' ? 'b-ALU' : k.startsWith('M:') ? 'mr-' + k.slice(2) : 'b-' + k;
+function flash(keys){
+  keys.forEach(k => { const el = document.getElementById(idOfKey(k)); if (!el) return;
+    if (k.startsWith('M:')){ el.firstElementChild.classList.add('hot'); return; }
+    el.classList.remove('flash'); void el.getBoundingClientRect(); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1400); });
+}
+function clearLive(){
+  live.wires.forEach(id => { const e = document.getElementById(id); e && e.classList.remove('live','tick'); });
+  live.gates.forEach(id => { const g = document.getElementById('g-'+id), l = document.getElementById('gl-'+id); g && g.classList.remove('on'); l && l.classList.remove('on'); });
+  live.wires.clear(); live.gates.clear();
+  document.querySelectorAll('.hot,.think').forEach(e => e.classList.remove('hot','think'));
+  document.querySelectorAll('.mchip.on').forEach(e => e.classList.remove('on'));
+  $('#layer').innerHTML = '';
+}
+function cancelAnim(){ tok++; clearLive(); }
+function light(r){
+  const R = ROUTES[r];
+  R.glow.forEach(id => { const e = document.getElementById(id); if (e){ e.classList.add('live'); live.wires.add(id); } });
+  R.gates.forEach(id => { const g = document.getElementById('g-'+id), l = document.getElementById('gl-'+id); if (g){ g.classList.add('on'); l.classList.add('on'); live.gates.add(id); } });
+}
+function unlight(r){
+  const R = ROUTES[r];
+  R.glow.forEach(id => { const e = document.getElementById(id); e && e.classList.remove('live'); });
+  R.gates.forEach(id => { const g = document.getElementById('g-'+id), l = document.getElementById('gl-'+id); g && g.classList.remove('on'); l && l.classList.remove('on'); });
+}
+function moveParticle(r, label, myTok){
+  const R = ROUTES[r], pts = R.pts;
+  const segs = []; let total = 0;
+  for (let i = 1; i < pts.length; i++){ const l = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1]); segs.push(l); total += l; }
+  const dur = reduce ? 40 : Math.min(1400, Math.max(600, total * 2.4)) / speed;
+  const w = Math.max(34, String(label).length * 8.2 + 14);
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.setAttribute('class', 'ptl' + (R.x ? ' x' : ''));
+  g.innerHTML = `<rect x="${-w/2}" y="-12" width="${w}" height="24" rx="12"/><text y="4.5">${esc(label)}</text>`;
+  $('#layer').appendChild(g);
+  const at = d => { let acc = 0; for (let i = 0; i < segs.length; i++){ if (d <= acc + segs[i] || i === segs.length - 1){ const t = segs[i] ? (d - acc) / segs[i] : 1; return [pts[i][0] + (pts[i+1][0]-pts[i][0]) * t, pts[i][1] + (pts[i+1][1]-pts[i][1]) * t]; } acc += segs[i]; } return pts[pts.length-1]; };
+  return new Promise(res => {
+    const t0 = performance.now();
+    const frame = now => {
+      if (tok !== myTok){ g.remove(); return res(false); }
+      let p = Math.min(1, (now - t0) / dur); const e = p < .5 ? 2*p*p : 1 - Math.pow(-2*p + 2, 2) / 2;
+      const [x, y] = at(e * total); g.setAttribute('transform', `translate(${x},${y})`);
+      if (p < 1) requestAnimationFrame(frame); else { g.remove(); res(true); }
+    };
+    requestAnimationFrame(frame);
+  });
+}
+async function playStep(i){
+  cancelAnim(); const my = tok;
+  const st = M.steps[i], before = M.snaps[i], after = M.snaps[i+1];
+  shown = i; updateUI(true);
+  render(before);
+  const clk = document.getElementById('w_clk'); clk.classList.add('tick'); live.wires.add('w_clk');
+  document.getElementById('b-CU').classList.add('think');
+  const chip = c => document.getElementById('mc-' + c);
+  if (st.sig.includes('READ')) chip('READ').classList.add('on');
+  if (st.sig.includes('WRITE')) chip('WRITE').classList.add('on');
+  if (st.hiMem != null){ const m = document.getElementById('mr-' + st.hiMem); m && m.firstElementChild.classList.add('hot'); }
+  if (st.sig.some(c => c.startsWith('FLAG:'))) document.getElementById('b-FLAGS').classList.add('think');
+  let cur = before;
+  if (!st.flows.length){
+    await sleep(reduce ? 50 : 1100 / speed); if (tok !== my) return false;
+    cur = after;
+  } else {
+    const groups = [];
+    st.flows.forEach(f => { if (f.par && groups.length) groups[groups.length-1].push(f); else groups.push([f]); });
+    for (const grp of groups){
+      grp.forEach(f => { light(f.r); if (f.reg){ const b = document.getElementById('b-' + f.reg); b && b.classList.add('hot'); } });
+      if (st.alu && grp.some(f => f.r === 'AC>ALU')){ document.getElementById('w_x3').classList.add('live'); live.wires.add('w_x3'); }
+      const ok = await Promise.all(grp.map(f => moveParticle(f.r, f.label, my)));
+      if (tok !== my || ok.some(x => !x)) return false;
+      grp.forEach(f => { unlight(f.r); if (f.reg){ const b = document.getElementById('b-' + f.reg); b && b.classList.remove('hot'); }
+        if (f.reveal){ cur = mix(cur, after, f.reveal); flash(f.reveal);
+          if (f.reveal.includes('PC') && st.sig.includes('PC+1')) popup('+1', 471.5, 228); } });
+      render(cur);
+      if (reduce === false) await sleep(120 / speed);
+      if (tok !== my) return false;
+    }
+  }
+  render(after); flash([]);
+  clearLive();
+  return true;
+}
+function popup(txt, x, y){
+  const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  t.setAttribute('class', 'popup'); t.setAttribute('x', x); t.setAttribute('y', y); t.textContent = txt;
+  $('#layer').appendChild(t);
+}
+
+/* ================= panel / lists ================= */
+function summaryHTML(){
+  const a = M.snaps[0], b = M.snaps[M.steps.length], ch = [];
+  REGS.forEach(r => { if (a[r] !== b[r]) ch.push(`<code>${r}</code>: ${hex(a[r])} → <b>${hex(b[r])}</b>`); });
+  FLAGS.forEach(f => { if (a[f] !== b[f]) ch.push(`flag <code>${f}</code>: ${a[f]} → <b>${b[f]}</b>`); });
+  Object.keys(b.mem).forEach(k => { k = +k; if (typeof b.mem[k] === 'number' && a.mem[k] !== b.mem[k]) ch.push(`memory <code>${hex(k)}</code>: ${hex(a.mem[k])} → <b>${hex(b.mem[k])}</b>`); });
+  const nextPC = b.PC;
+  return `<div class="done-banner"><b>Instruction finished.</b> ${ch.length ? 'What changed: ' + ch.join(', ') + '.' : 'No register, flag or memory value changed.'}
+    The CPU now returns to <b>Fetch</b> with PC = <code>${hex(nextPC)}</code>${M.irq ? ' (the interrupt handler)' : ''}.</div>`;
+}
+function panelHTML(){
+  if (shown < 0){
+    const ph = {};
+    PH_ORDER.forEach(p => { ph[p] = M.steps.filter(s => s.phase === p); });
+    const line = p => { const ss = ph[p], skip = ss.length === 1 && ss[0].skip;
+      return `<li><b>${PHASE[p].name}</b><span>${skip ? 'skipped for this instruction (one quick check)' : ss.length + ' clock ticks'}. ${PHASE[p].goal}</span></li>`; };
+    return `<div class="intro"><div class="ptag"><span class="ph">Ready</span> ${M.steps.length} clock ticks</div>
+      <h3 style="margin-top:10px">Instruction <code>${esc(M.ins.text)}</code> is stored at address <code>${hex(CODE_ADDR)}</code></h3>
+      <p class="say" style="margin-top:8px">The CPU repeats the same loop for every instruction. Here is how it plays out for this one:</p>
+      <ul>${PH_ORDER.map(line).join('')}</ul>
+      <p class="say">Press <b>Next</b> to go one tick at a time, or <b>Play</b> to let it run. Starting values: AX = ${hex(M.snaps[0].AX)}, BX = ${hex(M.snaps[0].BX)}, CX = ${hex(M.snaps[0].CX)}, DX = ${hex(M.snaps[0].DX)}; flags CF = ${M.snaps[0].CF}, ZF = ${M.snaps[0].ZF}, IF = ${M.snaps[0].IF}, DF = ${M.snaps[0].DF}.</p>
+      <p class="notation"><b>Reading the notation:</b> <code>A ← (B)</code> means "A receives a copy of what is inside B". This style is called register transfer notation.</p>
+      <p class="notation" style="margin-top:12px"><b>About the tick count:</b> the PPT's <code>ADD R1, X</code> example is 3 ticks because R1 <em>is</em> the accumulator. Here AX–DX sit in an added register file, so register → register moves go register → AC → MBR → register file, taking more ticks than the PPT. The micro-ops themselves match the Stallings datapath.</p></div>`;
+  }
+  const st = M.steps[shown], ph = PHASE[st.phase];
+  const sig = st.sig.length ? st.sig.map(c => { const x = chipOf(c); return `<span class="chip ${x.cls}">${esc(x.t)}</span>`; }).join('') : `<span class="chip none">no data moves, the control unit decides</span>`;
+  return `${pos === M.steps.length && !busy ? summaryHTML() : ''}
+    <div class="ptag"><span class="ph">${ph.name} cycle</span><span>Tick t${shown + 1} of t${M.steps.length}</span></div>
+    <p class="goal">${ph.goal}</p>
+    <div class="rtl">${esc(st.rtl).replace(/\n/g, '<br>')}</div>
+    <p class="say">${st.say}</p>
+    ${st.tip ? `<p class="tip">${st.tip}</p>` : ''}
+    <div class="sigs"><h3>Control signals switched on</h3><div class="chips">${sig}</div></div>`;
+}
+function renderList(){
+  let h = '', last = '';
+  M.steps.forEach((s, i) => {
+    if (s.phase !== last){ last = s.phase; h += `<tr class="ph"><td colspan="4">${PHASE[s.phase].name} cycle</td></tr>`; }
+    h += `<tr class="row" data-i="${i}"><td class="n">t${i + 1}</td><td class="r">${esc(s.rtl).replace(/\n/g, '<br>')}</td><td>${esc(s.title)}</td><td>${s.sig.map(c => `<span class="chip ${chipOf(c).cls}">${esc(c.replace(/^(Rout|Rin):/, (m, a) => a === 'Rout' ? 'R-out ' : 'R-in '))}</span>`).join('') || '<span style="color:var(--muted)">none</span>'}</td></tr>`;
+  });
+  $('#tbody').innerHTML = h;
+}
+
+/* Boolean expressions — one table per cycle */
+const SIG_ORDER = ['C0','C1','C2','C3','C4','C5','C6','C7','C8','C9','C10','C11','C12','C13','READ','WRITE','PC+1','CU>MAR','CU>PC'];
+function sigMeaning(k){ return SIG[k] || chipOf(k).t; }
+function renderBool(){
+  const cycles = ['fetch','indirect','execute','interrupt'];
+  const counters = {fetch:0, indirect:0, execute:0, interrupt:0};
+  const cd = {
+    fetch:{steps:[], sig:new Map()},
+    indirect:{steps:[], sig:new Map()},
+    execute:{steps:[], sig:new Map()},
+    interrupt:{steps:[], sig:new Map()}
+  };
+  M.steps.forEach((s, i) => {
+    counters[s.phase]++;
+    const prefix = {fetch:'F', indirect:'I', execute:'E', interrupt:'IN'}[s.phase];
+    const tLabel = 't' + (i + 1);
+    cd[s.phase].steps.push({ t: tLabel, phaseLabel: prefix + counters[s.phase], skip: !!s.skip, title: s.title });
+    s.sig.forEach(c => {
+      if (!cd[s.phase].sig.has(c)) cd[s.phase].sig.set(c, []);
+      cd[s.phase].sig.get(c).push(tLabel);
+    });
+  });
+
+  const html = cycles.map(p => {
+    const c = cd[p];
+    if (!c.steps.length) return '';
+    const first = c.steps[0].t, last = c.steps[c.steps.length-1].t;
+    const range = (first === last) ? first : `${first}–${last}`;
+    const allSkip = c.steps.every(s => s.skip);
+    const skipTag = allSkip ? '<span class="tag">skipped</span>' : '';
+    const tickWord = c.steps.length === 1 ? '1 tick' : `${c.steps.length} ticks`;
+    const head = `<div class="cycle-title">${PHASE[p].name} cycle <span class="range">${range} · ${tickWord}</span>${skipTag}</div>`;
+
+    if (c.sig.size === 0){
+      const msg = allSkip
+        ? 'Skipped for this instruction — no control signals are switched on.'
+        : 'No control signals are switched on in this cycle (only a decision check).';
+      return head + `<p class="cycle-empty">${msg}</p>`;
+    }
+
+    const keys = [...c.sig.keys()].sort((a,b) => {
+      const ai = SIG_ORDER.indexOf(a), bi = SIG_ORDER.indexOf(b);
+      if (ai < 0 && bi < 0) return a.localeCompare(b);
+      if (ai < 0) return 1;
+      if (bi < 0) return -1;
+      return ai - bi;
+    });
+
+    const rows = keys.map(k => {
+      const expr = c.sig.get(k).join(' + ');
+      const safeK = k.replace(/[>:]/g, '_');
+      return `<tr><td class="r">${k}</td><td>${sigMeaning(k)}</td><td class="mono">${safeK} = ${expr}</td></tr>`;
+    }).join('');
+
+    return head + `<div class="tablewrap"><table><thead><tr><th>Signal</th><th>Meaning</th><th>Boolean expression</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join('');
+
+  $('#boolCycles').innerHTML = html;
+}
+
+function updateUI(playingNow){
+  $('#panel').innerHTML = panelHTML();
+  const cur = shown >= 0 ? M.steps[shown].phase : null;
+  $('#pills').innerHTML = PH_ORDER.map((p, k) => {
+    const ss = M.steps.filter(s => s.phase === p); const lastI = ss[ss.length-1].i;
+    const finished = pos > lastI; const skip = ss.length === 1 && ss[0].skip;
+    let cls = '', sub = skip ? 'maybe skipped' : ss.length + ' ticks';
+    if (cur === p) cls = 'active'; else if (finished) cls = skip ? 'skipped' : 'done';
+    if (finished && cur !== p) sub = skip ? 'skipped' : 'done ✓';
+    return `${k ? '<span class="pillarrow" aria-hidden="true">→</span>' : ''}<div class="pill ${cls}"><b>${PHASE[p].name}</b><small>${sub}</small></div>`;
+  }).join('') + '<span class="loopnote">then back to Fetch</span>';
+  document.querySelectorAll('tr.row').forEach(tr => { const i = +tr.dataset.i; tr.classList.toggle('cur', i === shown); tr.classList.toggle('past', i < pos); });
+  const N = M.steps.length;
+  $('#scrub').max = N; $('#scrub').value = pos;
+  $('#scrubTxt').textContent = pos === 0 ? `Not started, ${N} ticks in total` : `${pos} of ${N} ticks done`;
+  $('#bBack').disabled = pos === 0 && !busy;
+  $('#bNext').disabled = pos >= N && !busy;
+  $('#bRestart').disabled = pos === 0 && !busy;
+  $('#playTxt').textContent = playing ? 'Pause' : (pos >= N ? 'Replay' : 'Play');
+  $('#playIcon').innerHTML = playing ? '<path d="M4 3h3.5v12H4zM10.5 3H14v12h-3.5z"/>' : '<path d="M5 3l10 6-10 6z"/>';
+}
+
+/* ================= controls ================= */
+async function advance(){
+  if (pos >= M.steps.length) return;
+  if (busy){ cancelAnim(); busy = false; render(M.snaps[pos + 1]); pos++; shown = pos - 1; updateUI(); return; }
+  busy = true; const i = pos;
+  const ok = await playStep(i);
+  if (ok && tok >= 0 && busy){ busy = false; pos = i + 1; shown = i; updateUI(); }
+}
+async function play(){
+  if (playing){ playing = false; updateUI(); return; }
+  if (pos >= M.steps.length){ restart(); }
+  playing = true; updateUI();
+  while (playing && pos < M.steps.length){
+    if (busy){ await sleep(60); continue; }
+    await advance();
+    if (!playing) break;
+    await sleep(reduce ? 80 : 520 / speed);
+  }
+  playing = false; updateUI();
+}
+function back(){
+  playing = false; cancelAnim();
+  if (busy) busy = false; else if (pos > 0) pos--;
+  render(M.snaps[pos]); shown = pos - 1; updateUI();
+}
+function restart(){
+  playing = false; cancelAnim(); busy = false; pos = 0; shown = -1; render(M.snaps[0]); updateUI();
+}
+function jump(i){
+  playing = false; cancelAnim(); busy = false; pos = i; shown = i - 1; render(M.snaps[pos]); updateUI();
+}
+function readRegs(){
+  const o = {};
+  for (const r of REGS){ const v = num($('#r-'+r).value); if (v == null) return {err:`Starting value of ${r} is not a valid hex number (up to 4 digits).`}; o[r] = v; }
+  return o;
+}
+function load(text, irq){
+  const rg = readRegs();
+  const r = rg.err ? rg : generate(text, irq, rg);
+  const err = $('#err');
+  if (r.err){ err.innerHTML = r.err; err.hidden = false; return false; }
+  err.hidden = true;
+  playing = false; cancelAnim(); busy = false;
+  M = r; pos = 0; shown = -1;
+  buildMemoryRows(M.rows, M.snaps[0].mem);
+  renderList(); renderBool(); render(M.snaps[0]); updateUI();
+  $('#ins').value = M.ins.text;
+  return true;
+}
+
+/* ================= glossary ================= */
+const GLOSS = [
+  ['PC','Program Counter','Holds the address of the next instruction. It goes up by 1 after each fetch.'],
+  ['MAR','Memory Address Register','Holds the address of the memory cell the CPU wants to read or write.'],
+  ['MBR','Memory Buffer Register','The doorway to memory: every value read from or written to memory passes through it.'],
+  ['IR','Instruction Register','Keeps the current instruction while it is decoded and executed.'],
+  ['AC','Accumulator','The ALU\'s working register. Calculations start and end here.'],
+  ['ALU','Arithmetic Logic Unit','The calculator: add, subtract, AND, OR.'],
+  ['CU','Control Unit','Reads the instruction and switches the control signals on, one clock tick at a time.'],
+  ['CLK','Clock','Ticks at a steady pace. Each micro-operation takes one tick.'],
+  ['C0–C13','Control signals','Gates on the wires. A data path only carries data while its signal is on.'],
+  ['CF / ZF / IF / DF','Flags (added)','The four flags the demo tracks. STC/CLC/CMC change CF; comparison and ALU ops update ZF and CF; STD/CLD change DF; STI/CLI change IF.'],
+  ['AX–DX','Register file (added)','General-purpose registers. Not in the original figure; added so MOV AX,BX has something to move.'],
+  ['Address bus','Memory column (added)','Carries the address from MAR to memory. The data bus carries values to and from the MBR.'],
+  ['Implied addressing','No operand field','The operation and any operand are named in the opcode itself (STC, NOP, HLT, …). No data moves.'],
+  ['Indirect cycle','Pointer in memory','Follows a memory pointer ([[addr]]) to find the real address. Register-pointers (BX, [BX+4]) defer the address calculation to Execute, matching the ICC state diagram.'],
+  ['Interrupt','Device attention','A device asks the CPU to pause. The CPU saves the PC and jumps to a handler.']
+];
+$('#glossary').innerHTML = GLOSS.map(([a, b, c]) => `<div class="card g"><span class="nm">${a}</span><b>${b}</b><p>${c}</p></div>`).join('');
+
+/* ================= wire up ================= */
+buildSVG();
+const EXAMPLES = ['MOV AX,BX','MOV AX,05H','MOV AX,[BX]','ADD AX,[BX+1]','MOV AX,[0200]','ADD CX,[[0300]]','MOV [0201],CX','MOV [0200],7','SUB BX,CX','XOR AX,AX','CMP AX,CX','INC CX','NEG AX','JMP 0400','STC','CLC','CMC','NOP','HLT'];
+const DEFR = {AX:'0001', BX:'0200', CX:'0003', DX:'0000'};
+$('#regs').insertAdjacentHTML('beforeend', REGS.map(r => `<label for="r-${r}">${r}<input id="r-${r}" value="${DEFR[r]}" maxlength="6" spellcheck="false"></label>`).join(''));
+$('#regs').addEventListener('change', () => load($('#ins').value, $('#irq').checked));
+$('#examples').insertAdjacentHTML('beforeend', EXAMPLES.map(e => `<button type="button" class="ex" data-e="${e}">${e}</button>`).join(''));
+$('#examples').addEventListener('click', e => { const b = e.target.closest('.ex'); if (b){ $('#ins').value = b.dataset.e; load(b.dataset.e, $('#irq').checked); } });
+$('#form').addEventListener('submit', e => { e.preventDefault(); load($('#ins').value, $('#irq').checked); });
+$('#irq').addEventListener('change', () => load($('#ins').value, $('#irq').checked));
+$('#bNext').addEventListener('click', () => { playing = false; advance(); });
+$('#bBack').addEventListener('click', back);
+$('#bPlay').addEventListener('click', play);
+$('#bRestart').addEventListener('click', restart);
+$('#scrub').addEventListener('input', e => jump(+e.target.value));
+$('#speed').addEventListener('change', e => { speed = +e.target.value; });
+$('#tbody').addEventListener('click', e => { const tr = e.target.closest('tr.row'); if (tr) jump(+tr.dataset.i + 1); });
+document.addEventListener('keydown', e => {
+  if (/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName) && e.target.id !== 'scrub') return;
+  if (e.key === 'ArrowRight'){ e.preventDefault(); playing = false; advance(); }
+  else if (e.key === 'ArrowLeft'){ e.preventDefault(); back(); }
+  else if (e.key === ' '){ e.preventDefault(); play(); }
+});
+window.__cpu = {generate, load, get M(){ return M; }, advance, jump, get pos(){ return pos; }};
+load('MOV AX,BX', true);
+})();
+</script>
+
+</body></html>
